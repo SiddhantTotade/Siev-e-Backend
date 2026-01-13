@@ -23,7 +23,6 @@ public class GmailService {
             Gmail gmail,
             EmailCategoryCacheService cacheService,
             AsyncEmailCategorizationService asyncCategorizationService) {
-
         this.gmail = gmail;
         this.cacheService = cacheService;
         this.asyncCategorizationService = asyncCategorizationService;
@@ -61,14 +60,12 @@ public class GmailService {
                 String messageId = fullMessage.getId();
 
                 String category = cacheService.getCategory(messageId);
-
                 if (category == null) {
                     asyncCategorizationService.categorizeAndCacheEmail(
                             messageId,
                             subject,
                             snippet);
-
-                    category = "PENDING";
+                    category = "PENDING"; // AI will categorize asynchronously
                 }
 
                 emails.add(new GmailDTO(
@@ -80,8 +77,6 @@ public class GmailService {
             }
         }
 
-        return new GmailPageResponse(
-                emails,
-                response.getNextPageToken());
+        return new GmailPageResponse(emails, response.getNextPageToken());
     }
 }

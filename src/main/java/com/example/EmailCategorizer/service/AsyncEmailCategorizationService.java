@@ -18,8 +18,8 @@ public class AsyncEmailCategorizationService {
 
     @Async
     public void categorizeAndCacheEmail(String messageId, String subject, String body) {
-
         aiService.categorizeEmailWithAi(subject, body)
                 .thenAccept(category -> cacheService.saveCategory(messageId, category));
     }
+
 }
