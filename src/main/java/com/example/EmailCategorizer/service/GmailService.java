@@ -19,8 +19,7 @@ public class GmailService {
     private final EmailCategoryCacheService cacheService;
     private final AsyncEmailCategorizationService asyncCategorizationService;
 
-    public GmailService(
-            Gmail gmail,
+    public GmailService(Gmail gmail,
             EmailCategoryCacheService cacheService,
             AsyncEmailCategorizationService asyncCategorizationService) {
         this.gmail = gmail;
@@ -29,6 +28,10 @@ public class GmailService {
     }
 
     public GmailPageResponse fetchEmails(String userId, String pageToken) throws IOException {
+
+        if (gmail == null) {
+            return new GmailPageResponse(new ArrayList<>(), null);
+        }
 
         ListMessagesResponse response = gmail.users()
                 .messages()
@@ -48,12 +51,10 @@ public class GmailService {
                 String subject = "";
 
                 for (var header : fullMessage.getPayload().getHeaders()) {
-                    if ("From".equalsIgnoreCase(header.getName())) {
+                    if ("From".equalsIgnoreCase(header.getName()))
                         from = header.getValue();
-                    }
-                    if ("Subject".equalsIgnoreCase(header.getName())) {
+                    if ("Subject".equalsIgnoreCase(header.getName()))
                         subject = header.getValue();
-                    }
                 }
 
                 String snippet = fullMessage.getSnippet();
@@ -61,19 +62,11 @@ public class GmailService {
 
                 String category = cacheService.getCategory(messageId);
                 if (category == null) {
-                    asyncCategorizationService.categorizeAndCacheEmail(
-                            messageId,
-                            subject,
-                            snippet);
-                    category = "PENDING"; // AI will categorize asynchronously
+                    asyncCategorizationService.categorizeAndCacheEmail(messageId, subject, snippet);
+                    category = "PENDING";
                 }
 
-                emails.add(new GmailDTO(
-                        messageId,
-                        from,
-                        subject,
-                        snippet,
-                        category));
+                emails.add(new GmailDTO(messageId, from, subject, snippet, category));
             }
         }
 
