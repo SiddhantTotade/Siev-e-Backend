@@ -17,14 +17,14 @@ public class GmailService {
 
     private final Gmail gmail;
     private final EmailCategoryCacheService cacheService;
-    private final AsyncEmailCategorizationService asyncCategorizationService;
+    private final AIEmailCategorizationService aiService; // synchronous AI service
 
     public GmailService(Gmail gmail,
-            EmailCategoryCacheService cacheService,
-            AsyncEmailCategorizationService asyncCategorizationService) {
+                        EmailCategoryCacheService cacheService,
+                        AIEmailCategorizationService aiService) {
         this.gmail = gmail;
         this.cacheService = cacheService;
-        this.asyncCategorizationService = asyncCategorizationService;
+        this.aiService = aiService;
     }
 
     public GmailPageResponse fetchEmails(String userId, String pageToken) throws IOException {
@@ -33,6 +33,7 @@ public class GmailService {
             return new GmailPageResponse(new ArrayList<>(), null);
         }
 
+        // Fetch Gmail messages
         ListMessagesResponse response = gmail.users()
                 .messages()
                 .list(userId)
@@ -41,6 +42,7 @@ public class GmailService {
                 .execute();
 
         List<GmailDTO> emails = new ArrayList<>();
+        List<GmailDTO> uncategorized = new ArrayList<>();
 
         if (response.getMessages() != null) {
             for (Message msg : response.getMessages()) {
@@ -49,7 +51,6 @@ public class GmailService {
 
                 String from = "";
                 String subject = "";
-
                 for (var header : fullMessage.getPayload().getHeaders()) {
                     if ("From".equalsIgnoreCase(header.getName()))
                         from = header.getValue();
@@ -60,13 +61,28 @@ public class GmailService {
                 String snippet = fullMessage.getSnippet();
                 String messageId = fullMessage.getId();
 
+                // Check cache
                 String category = cacheService.getCategory(messageId);
                 if (category == null) {
-                    asyncCategorizationService.categorizeAndCacheEmail(messageId, subject, snippet);
-                    category = "PENDING";
+                    // mark as uncategorized
+                    GmailDTO emailDTO = new GmailDTO(messageId, from, subject, snippet, null);
+                    uncategorized.add(emailDTO);
+                    emails.add(emailDTO); // placeholder, will update category after AI call
+                } else {
+                    emails.add(new GmailDTO(messageId, from, subject, snippet, category));
                 }
+            }
+        }
 
-                emails.add(new GmailDTO(messageId, from, subject, snippet, category));
+        // Call AI microservice for uncategorized emails synchronously
+        if (!uncategorized.isEmpty()) {
+            aiService.categorizeBatchSync(uncategorized, cacheService); // blocks until categories are saved
+
+            // Update categories in original list
+            for (GmailDTO email : emails) {
+                if (email.getCategory() == null) {
+                    email.setCategory(cacheService.getCategory(email.getId()));
+                }
             }
         }
 

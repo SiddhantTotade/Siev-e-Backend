@@ -1,25 +1,27 @@
 package com.example.EmailCategorizer.service;
 
+import java.util.List;
+
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+
+import com.example.EmailCategorizer.dto.GmailDTO;
 
 @Service
 public class AsyncEmailCategorizationService {
 
     private final AIEmailCategorizationService aiService;
-    private final EmailCategoryCacheService cacheService;
+    private final EmailCategoryCacheService cache;
 
     public AsyncEmailCategorizationService(
             AIEmailCategorizationService aiService,
-            EmailCategoryCacheService cacheService) {
+            EmailCategoryCacheService cache) {
         this.aiService = aiService;
-        this.cacheService = cacheService;
+        this.cache = cache;
     }
 
-    @Async
-    public void categorizeAndCacheEmail(String messageId, String subject, String body) {
-        aiService.categorizeEmailWithAi(subject, body)
-                .thenAccept(category -> cacheService.saveCategory(messageId, category));
+    @Async("aiExecutor")
+    public void categorizeBatch(List<GmailDTO> emails) {
+        aiService.categorizeBatchSync(emails, cache);
     }
-
 }
