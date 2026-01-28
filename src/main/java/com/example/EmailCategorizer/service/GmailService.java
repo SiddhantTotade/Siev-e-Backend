@@ -9,32 +9,30 @@ import org.springframework.stereotype.Service;
 import com.example.EmailCategorizer.dto.GmailDTO;
 import com.example.EmailCategorizer.dto.GmailPageResponse;
 import com.google.api.services.gmail.Gmail;
-import com.google.api.services.gmail.model.ListMessagesResponse;
-import com.google.api.services.gmail.model.Message;
+
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 
 @Service
 public class GmailService {
 
     private final Gmail gmail;
-    private final EmailCategoryCacheService cacheService;
-    private final AIEmailCategorizationService aiService; // synchronous AI service
+    private final EmailCategoryCacheService cache;
+    private final AsyncEmailCategorizationService asyncAI;
 
-    public GmailService(Gmail gmail,
-                        EmailCategoryCacheService cacheService,
-                        AIEmailCategorizationService aiService) {
+    public GmailService(
+            Gmail gmail,
+            EmailCategoryCacheService cache,
+            AsyncEmailCategorizationService asyncAI) {
         this.gmail = gmail;
-        this.cacheService = cacheService;
-        this.aiService = aiService;
+        this.cache = cache;
+        this.asyncAI = asyncAI;
     }
 
+    @RateLimiter(name = "gmail")
     public GmailPageResponse fetchEmails(String userId, String pageToken) throws IOException {
+        System.out.println("📩 GmailService.fetchEmails CALLED");
 
-        if (gmail == null) {
-            return new GmailPageResponse(new ArrayList<>(), null);
-        }
-
-        // Fetch Gmail messages
-        ListMessagesResponse response = gmail.users()
+        var response = gmail.users()
                 .messages()
                 .list(userId)
                 .setMaxResults(10L)
@@ -42,48 +40,48 @@ public class GmailService {
                 .execute();
 
         List<GmailDTO> emails = new ArrayList<>();
-        List<GmailDTO> uncategorized = new ArrayList<>();
+        List<GmailDTO> toCategorize = new ArrayList<>();
 
-        if (response.getMessages() != null) {
-            for (Message msg : response.getMessages()) {
-
-                Message fullMessage = gmail.users().messages().get(userId, msg.getId()).execute();
-
-                String from = "";
-                String subject = "";
-                for (var header : fullMessage.getPayload().getHeaders()) {
-                    if ("From".equalsIgnoreCase(header.getName()))
-                        from = header.getValue();
-                    if ("Subject".equalsIgnoreCase(header.getName()))
-                        subject = header.getValue();
-                }
-
-                String snippet = fullMessage.getSnippet();
-                String messageId = fullMessage.getId();
-
-                // Check cache
-                String category = cacheService.getCategory(messageId);
-                if (category == null) {
-                    // mark as uncategorized
-                    GmailDTO emailDTO = new GmailDTO(messageId, from, subject, snippet, null);
-                    uncategorized.add(emailDTO);
-                    emails.add(emailDTO); // placeholder, will update category after AI call
-                } else {
-                    emails.add(new GmailDTO(messageId, from, subject, snippet, category));
-                }
-            }
+        if (response.getMessages() == null) {
+            return new GmailPageResponse(emails, response.getNextPageToken());
         }
 
-        // Call AI microservice for uncategorized emails synchronously
-        if (!uncategorized.isEmpty()) {
-            aiService.categorizeBatchSync(uncategorized, cacheService); // blocks until categories are saved
+        for (var msg : response.getMessages()) {
 
-            // Update categories in original list
-            for (GmailDTO email : emails) {
-                if (email.getCategory() == null) {
-                    email.setCategory(cacheService.getCategory(email.getId()));
-                }
+            var full = gmail.users().messages().get(userId, msg.getId()).execute();
+
+            String from = "";
+            String subject = "";
+
+            for (var h : full.getPayload().getHeaders()) {
+                if ("From".equalsIgnoreCase(h.getName()))
+                    from = h.getValue();
+                if ("Subject".equalsIgnoreCase(h.getName()))
+                    subject = h.getValue();
             }
+
+            String body = full.getSnippet();
+            String id = full.getId();
+
+            String category = cache.getCategory(id);
+
+            GmailDTO dto = new GmailDTO(
+                    id,
+                    from,
+                    subject,
+                    body,
+                    category != null ? category : "PROCESSING");
+
+            if (category == null) {
+                cache.saveCategory(id, "PROCESSING");
+                toCategorize.add(dto);
+            }
+
+            emails.add(dto);
+        }
+
+        if (!toCategorize.isEmpty()) {
+            asyncAI.categorizeBatch(toCategorize);
         }
 
         return new GmailPageResponse(emails, response.getNextPageToken());

@@ -1,23 +1,28 @@
 package com.example.EmailCategorizer.service;
 
-import java.util.concurrent.ConcurrentHashMap;
-
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
 public class EmailCategoryCacheService {
 
-    private final ConcurrentHashMap<String, String> cache = new ConcurrentHashMap<>();
+    private final StringRedisTemplate redis;
+
+    public EmailCategoryCacheService(StringRedisTemplate redis) {
+        this.redis = redis;
+    }
+
+    private static final String PREFIX = "email:category:";
 
     public String getCategory(String messageId) {
-        return cache.get(messageId);
+        return redis.opsForValue().get(PREFIX + messageId);
     }
 
     public void saveCategory(String messageId, String category) {
-        cache.put(messageId, category);
+        redis.opsForValue().set(PREFIX + messageId, category);
     }
 
     public boolean contains(String messageId) {
-        return cache.containsKey(messageId);
+        return Boolean.TRUE.equals(redis.hasKey(PREFIX + messageId));
     }
 }
