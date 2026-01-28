@@ -30,7 +30,6 @@ public class GmailService {
 
     @RateLimiter(name = "gmail")
     public GmailPageResponse fetchEmails(String userId, String pageToken) throws IOException {
-        System.out.println("📩 GmailService.fetchEmails CALLED");
 
         var response = gmail.users()
                 .messages()

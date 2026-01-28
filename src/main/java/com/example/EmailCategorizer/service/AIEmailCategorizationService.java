@@ -23,7 +23,6 @@ public class AIEmailCategorizationService {
     private final RestTemplate restTemplate = new RestTemplate();
 
     public void categorizeBatchSync(List<GmailDTO> emails, EmailCategoryCacheService cache) {
-        System.out.println("🤖 AI CALL EXECUTED");
 
         List<AIBatchEmail> batch = emails.stream()
                 .map(e -> new AIBatchEmail(e.getId(), e.getSubject(), e.getBody()))
@@ -48,7 +47,6 @@ public class AIEmailCategorizationService {
             }
 
         } catch (Exception e) {
-            System.out.println("❌ AI call failed: " + e.getMessage());
             emails.forEach(em -> cache.saveCategory(em.getId(), "OTHER"));
         }
     }

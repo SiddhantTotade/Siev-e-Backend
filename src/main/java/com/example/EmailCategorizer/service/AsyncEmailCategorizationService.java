@@ -18,11 +18,8 @@ public class AsyncEmailCategorizationService {
         this.cache = cache;
     }
 
-    // Use aiExecutor defined in AsyncConfig
     @Async("aiExecutor")
     public void categorizeBatch(List<GmailDTO> emails) {
-        System.out.println("🔥 ASYNC THREAD Started: " + Thread.currentThread().getName());
         ai.categorizeBatchSync(emails, cache);
-        System.out.println("🔥 ASYNC THREAD Ended");
     }
 }
